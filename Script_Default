@@ -27,7 +27,7 @@ MAQUINA_POR_IP = {
     "192.168.0.12": "CNC05",
     "192.168.0.13": "CNC06",
 }
-HANDSHAKE_NORMAL = {b"\x11"} #(0x11) PC->CNC
+HANDSHAKE= {b"\x11"} #(0x11) PC->CNC
 
 #Criação de pastas
 for maquina in set(MAQUINA_POR_IP.values()):
@@ -107,35 +107,55 @@ def enviar_dnc(conn, caminho, maquina):
 
 def enviar_auto(conn, caminho, maquina):
     log("Envio iniciado", maquina)
+    with open(caminho, "rb") as f:
+        linhas = list(f)
+    if not linhas:
+        return "NORMAL"
+    try:
+        conn.sendall(linhas[0])
+    except (ConnectionResetError, BrokenPipeError, OSError):
+        log("Conexão perdida durante envio", maquina)
+        return
     pausado = False
     modo_dnc = False
-    with open(caminho, "rb") as f:
-        for linha in f:
-            try:
-                conn.sendall(linha)
-            except (ConnectionResetError, BrokenPipeError, OSError):
-                log("Conexão perdida durante envio", maquina)
-                return
-            pronto, _, _ = select.select([conn], [], [], 0.01)
-            if pronto:
-                ctrl = conn.recv(1)
-                if ctrl == XOFF:
-                    modo_dnc = True
-                    pausado = True
-                    maquina_atividade(maquina,"Usinando")
-                elif ctrl == XON:
-                    pausado = False
+    pronto, _, _ = select.select([conn], [], [], 0.2)
+    if pronto:
+        ctrl = conn.recv(1)
+        if ctrl == XOFF:
+            modo_dnc = True
+            pausado = True
+            maquina_atividade(maquina, "Usinando")
+
+    if modo_dnc:
+        for linha in linhas[1:]:
             while pausado:
                 pronto, _, _ = select.select([conn], [], [], 0.5)
                 if pronto:
                     ctrl = conn.recv(1)
                     if ctrl == XON:
                         pausado = False
-    if modo_dnc:
+            try:
+                conn.sendall(linha)
+            except (ConnectionResetError, BrokenPipeError, OSError):
+                log("Conexão perdida durante DNC", maquina)
+                return "DNC"
+            pronto, _, _ = select.select([conn], [], [], 0.01)
+            if pronto:
+                ctrl = conn.recv(1)
+                if ctrl == XOFF:
+                    pausado = True
         log("Programa finalizado", maquina)
         log_geral_evento(maquina, conn.getpeername()[0], "Usinagem finalizada")
         return "DNC"
+
     else:
+        for linha in linhas[1:]:
+            try:
+                conn.sendall(linha)
+            except (ConnectionResetError, BrokenPipeError, OSError):
+                log("Conexão perdida durante envio", maquina)
+                return "NORMAL"
+            time.sleep(0.02)
         log("Transferência finalizada", maquina)
         log_geral_evento(maquina, conn.getpeername()[0], "Programa enviado com sucesso")
         return "NORMAL"
