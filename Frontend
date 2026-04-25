@@ -1,0 +1,126 @@
+import socket
+import json
+import threading
+import tkinter as tk
+from threading import Lock
+import queue
+
+SERVER_IP = "192.168.0.2"
+PORT = 8898
+
+maquinas = {}
+lock = Lock()
+fila_estado = queue.Queue()
+
+# ================= RECEBER ESTADO =================
+
+def receber_estado():
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.connect((SERVER_IP, PORT))
+    sock.settimeout(1)
+    buffer = ""
+    while True:
+        try:
+            data = sock.recv(4096).decode()
+        except socket.timeout:
+            continue
+        
+        if not data:
+            raise ConnectionError("Servidor desconectou")
+        
+        buffer += data
+        if "\n" in buffer:
+            linha, buffer = buffer.split("\n", 1)
+            estado = json.loads(linha)
+            fila_estado.put(estado)
+# ================= GUI =================
+
+root = tk.Tk()
+root.title("Monitor CNC - Rede")
+
+frame = tk.Frame(root)
+frame.pack(padx=10, pady=10)
+
+cards = {}
+
+def criar_cards():
+
+    frame.configure(bg="#203864")
+    root.configure(bg="#A3A6A5")
+
+    for i, nome in enumerate([
+        "CNC01 Gustavo",
+        "CNC02 Anderson",
+        "Galaxy20 Robson",
+        "G240 Gabriel",
+        "Galaxy50 Nairson",
+        "Multiplic35D Wesley"
+    ]):
+        f = tk.Frame(frame, width=200, height=70, relief="ridge", borderwidth=2)
+        f.grid(row=i//3, column=i%3, padx=10, pady=10)
+        f.config(bg="#ededed")
+        f.grid_propagate(False)
+        canvas = tk.Canvas(f, width=20, height=20)
+        canvas.place(relx=0.1, rely=0.5)
+        lbl_nome = tk.Label(
+            f,
+            text=nome,
+            bg=f["bg"],
+            font=("bahnschrift", 12, "bold")
+        )
+        lbl_nome.place(relx=0.5, rely=0.8, anchor="center")
+        lbl_ip = tk.Label(
+            f,
+            text="IP: -",
+            bg=f["bg"],
+            font=("bahnschrift",10),
+            fg='#a3a6a5'
+        )
+        lbl_ip.place(relx=0.05, rely=0.35)
+        lbl_status = tk.Label(
+            f,
+            text="Status: Offline",
+            bg=f["bg"],
+            font=("bahnschrift",10)
+        )
+        lbl_status.place(rely=0.01,relx=0.15)
+        cards[nome] = (canvas, lbl_ip, lbl_status)
+
+def atualizar_gui():
+    while not fila_estado.empty():
+        estado = fila_estado.get()
+        with lock:
+            maquinas.clear()
+            maquinas.update(estado)
+    with lock:
+        for nome, dados in maquinas.items():
+            if nome not in cards:
+                continue
+            canvas, lbl_ip, lbl_status = cards[nome]
+            canvas.delete("all")
+            if dados["status"] == "Offline":
+                cor = "red"
+
+            elif dados["atividade"] == "Enviando":
+                cor = "orange"
+
+            elif dados["atividade"] == "Usinando":
+                cor = "blue"
+
+            elif dados["atividade"] == "Recebendo":
+                cor = "purple"
+
+            else:
+                cor = "green"
+
+            canvas.create_oval(2,2,18,18,fill=cor)
+            canvas.place(relx=0.1,rely=0.2,anchor="center")
+            lbl_ip.config(text=f"IP: {dados['ip']}")
+            lbl_status.config(
+                text=f"{dados['status']} | {dados['atividade']}"
+            )
+    root.after(500, atualizar_gui)
+criar_cards()
+threading.Thread(target=receber_estado, daemon=True).start()
+root.after(200, atualizar_gui)
+root.mainloop()
