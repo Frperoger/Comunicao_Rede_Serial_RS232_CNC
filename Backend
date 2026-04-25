@@ -1,0 +1,337 @@
+import socket
+import os
+import time
+import threading
+import select
+import json
+from threading import Lock
+from datetime import datetime
+
+HOST = "0.0.0.0"
+PORT = 8899
+PORT_MONITOR = 8898
+
+BASE_DIR = r"......" #pasta a ser criada
+
+PASTA_ENVIAR = os.path.join(BASE_DIR, "ENVIAR")
+PASTA_RECEBER = os.path.join(BASE_DIR, "RECEBER")
+PASTA_LOG = os.path.join(BASE_DIR, "LOG")
+XON  = b'\x11'
+XOFF = b'\x13'
+
+MAQUINA_POR_IP = {
+    "192.168.0.8": "CNC01",
+    "192.168.0.9": "CNC02",
+    "192.168.0.10": "Galaxy20",
+    "192.168.0.11": "G240",
+    "192.168.0.12": "Galaxy50",
+    "192.168.0.13": "Multiplic35D",
+    "SEU IP VAI AQUI": "PC", #use seu ip para fazer testes no hercules
+}
+HANDSHAKE = {b"\x11"}
+
+# Criação de pastas
+for maquina in set(MAQUINA_POR_IP.values()):
+    os.makedirs(os.path.join(PASTA_ENVIAR, maquina), exist_ok=True)
+os.makedirs(PASTA_RECEBER, exist_ok=True)
+os.makedirs(PASTA_LOG, exist_ok=True)
+
+# ================= LOG =================
+def log(msg, maquina="GERAL"):
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    caminho = os.path.join(PASTA_LOG, f"{maquina}.log")
+    with open(caminho, "a", encoding="utf-8") as f:
+        f.write(f"[{ts}] {msg}\n")
+    print(f"[{maquina}] {msg}")
+    
+def log_geral_evento(maquina, ip, evento):
+    log(f"[{maquina} | {ip}]{evento}", "GERAL")
+# ================= ESTADO DAS MÁQUINAS =================
+
+NOMES_MAQUINAS = [
+    "CNC01",
+    "CNC02",
+    "Galaxy20",
+    "G240",
+    "Galaxy50",
+    "Multiplic35D",
+    "PC",
+]
+maquinas = {}
+lock = Lock()
+
+for nome in NOMES_MAQUINAS:
+    maquinas[nome] = {
+        "status": "Offline",
+        "atividade": "Repouso",
+        "ip": "-",
+        "last_seen": time.time()
+    }
+
+TIMEOUT = 20
+
+def maquina_conectada(nome, ip):
+    with lock:
+        maquinas[nome]["status"] = "Online"
+        maquinas[nome]["atividade"] = "Disponivel"
+        maquinas[nome]["ip"] = ip
+        maquinas[nome]["last_seen"] = time.time()
+
+def maquina_Online(nome, ip=None):
+    with lock:
+        maquinas[nome]["status"] = "Online"
+        if maquinas[nome]["atividade"] == "Repouso":
+            maquinas[nome]["atividade"] = "Disponivel"
+        if ip:
+            maquinas[nome]["ip"] = ip
+        maquinas[nome]["last_seen"] = time.time()
+
+def maquina_atividade(nome, atividade):
+    with lock:
+        maquinas[nome]["atividade"] = atividade
+        maquinas[nome]["last_seen"] = time.time()
+
+def maquina_Offline(nome):
+    with lock:
+        maquinas[nome]["status"] = "Offline"
+        maquinas[nome]["atividade"] = "Repouso"
+        maquinas[nome]["ip"] = "-"
+
+def monitor_timeout():
+    while True:
+        time.sleep(1)
+        agora = time.time()
+        with lock:
+            for nome, m in maquinas.items():
+                if agora - m["last_seen"] < TIMEOUT:
+                    continue
+                if m["atividade"] in ("Usinando", "Enviando", "Recebendo"):
+                    continue
+                maquinas[nome]["status"] = "Offline"
+                maquinas[nome]["atividade"] = "Repouso"
+                maquinas[nome]["ip"] = "-"
+                
+#selecona 1 arquivo
+def pegar_arquivo(pasta):
+    arquivos = [f for f in os.listdir(pasta)
+                if os.path.isfile(os.path.join(pasta, f))]
+    if not arquivos:
+        return None
+    return os.path.join(pasta, arquivos[0])
+
+def enviar_auto(conn, caminho, maquina):
+    log("Envio iniciado", maquina)
+    
+    with open(caminho, "rb") as f:
+        linhas = list(f)
+    if not linhas:
+        return "NORMAL"
+    try:
+        conn.sendall(linhas[0])
+    except (ConnectionResetError,BrokenPipeError,OSError):
+        log("Conexão perdida durante envio",maquina)
+        return
+    modo_dnc = False
+    pausado = False
+    pronto, _, _ = select.select([conn], [], [], 0.2)
+    if pronto:
+        ctrl = conn.recv(1)
+        if ctrl == XOFF:
+            modo_dnc = True
+            pausado = True
+            maquina_atividade(maquina, "Usinando")
+            
+    if modo_dnc:
+        for linha in linhas[1:]:
+            while pausado:
+                pronto, _, _ = select.select([conn], [], [], 0.5)
+                if pronto:
+                    ctrl = conn.recv(1)
+                    if ctrl == XON:
+                        pausado = False
+            try:
+                conn.sendall(linha)
+            except (ConnectionResetError,BrokenPipeError,OSError):
+                log("Conexão perdida durante DNC",maquina)
+                return "DNC"
+            pronto, _, _ = select.select([conn], [], [], 0.01)
+            if pronto:
+                ctrl = conn.recv(1)
+                if ctrl == XOFF:
+                    pausado = True
+        log("Programa finalizado", maquina)
+        log_geral_evento(maquina, conn.getpeername()[0], "Usinagem finalizada")
+        return "DNC"
+    else:
+        for linha in linhas[1:]:
+            try:
+                conn.sendall(linha)
+            except (ConnectionResetError, BrokenPipeError,OSError):
+                return "NORMAL"
+            time.sleep(0.02)
+        log("Transferência finalizada", maquina)
+        log_geral_evento(maquina, conn.getpeername()[0], "Programa enviado com sucesso")
+        return "NORMAL"
+
+def atender_conexao(conn, addr):
+
+    conn.settimeout(0.5)
+    ip = addr[0]
+    log(f"Conectado: {addr}")
+    maquina = MAQUINA_POR_IP.get(ip, "DESCONHECIDA")
+    estado = "IDLE"
+    buffer = b""
+    Recebendo = False
+    ultimo_ping = time.time()
+    if maquina in maquinas:
+        maquina_Online(maquina,ip)
+    log_geral_evento(maquina, ip, "CONEXÃO ESTABELECIDA")
+    try:
+        while True:
+            Recebendo = False
+            if time.time() - ultimo_ping > 8:
+                try:
+                    data = conn.send(b'\x00')
+                except:
+                    log("Conexão perdida - aguardando reconexão",maquina)
+                    break
+                ultimo_ping = time.time()
+            try:
+                data = conn.recv(4096)
+                if not data:
+                    time.sleep(0.1)
+                    continue
+            except socket.timeout:
+                maquina_Online(maquina)
+                continue
+            except ConnectionResetError:
+                log("Reconectando após desconexão",maquina)
+                break
+            
+            for byte in data:
+                b = bytes([byte])
+                if estado == "IDLE":
+                    if maquina == "DESCONHECIDA":
+                        log(f"IP não mapeado: {ip}","GERAL")
+                        continue
+                    if b in HANDSHAKE:
+                        maquina_conectada(maquina, ip)
+                        pasta = os.path.join(PASTA_ENVIAR, maquina)
+                        log("Preparando envio",maquina)
+                        caminho = pegar_arquivo(pasta)
+                        if caminho:
+                            estado = "ENVIANDO"
+                            maquina_atividade(maquina, "Enviando")
+                            modo = enviar_auto(conn, caminho, maquina)
+                            if modo == "NORMAL":
+                                os.remove(caminho)
+                                log("Arquivo removido após envio", maquina)
+                            maquina_atividade(maquina, "Repouso")
+                            maquina_Online(maquina,ip)
+                        estado = "IDLE"
+                        continue
+                    elif b == b"%":
+                        estado = "RECEBENDO"
+                        buffer = b"%"  
+                        continue   
+                elif estado == "RECEBENDO":
+                    maquina_Online(maquina)
+                    if not Recebendo:
+                        maquina_atividade(maquina,"Recebendo")
+                        Recebendo = True
+                    buffer += b              
+                    if b == b"%":
+                        texto = buffer.decode("latin-1", errors="ignore")
+                        linhas = texto.splitlines()
+                        primeira_linha = "PROGRAMA"
+                        for l in linhas:
+                            l = l.strip()
+                            if l and l != "%":
+                                primeira_linha = l
+                                break
+                        invalidos = r'<>:"/\\|?*;'
+                        for c in invalidos:
+                            primeira_linha = primeira_linha.replace(c, "")
+                        timestamp = datetime.now().strftime("d%d-%Hh-%Mm-%Ss")
+                        nome = f"{maquina}_{primeira_linha}_{timestamp}.nc"
+                        caminho = os.path.join(PASTA_RECEBER, nome)
+                        with open(caminho, "wb") as f:
+                            f.write(buffer)
+                        log(f"Arquivo recebido: {nome}", maquina)
+                        log_geral_evento(maquina, ip, f"RECEBIDO ({nome})")
+                        buffer = b""
+                        estado = "IDLE"
+                        maquina_atividade(maquina, "Repouso")
+                        continue
+                    elif estado in ("ENVIANDO","DNC"):
+                        continue
+    except ConnectionResetError:
+        log("Conexão encerrada pela máquina (10054)", maquina)
+
+    except OSError as e:
+        if hasattr(e, "winerror") and e.winerror == 10054:
+            log("Conexão cancelada pelo host remoto (10054)", maquina)
+        else:
+            log(f"Erro socket: {e}", maquina)
+
+    except Exception as e:
+        log(f"Erro inesperado: {e}", maquina)
+        
+    finally:
+        if maquina in maquinas:
+            maquina_Offline(maquina)
+        conn.close()
+        log("Conexão encerrada", maquina)
+        log_geral_evento(maquina,ip,"CONEXÃO ENCERRADA")
+
+# ================= SERVIDOR CNC =================
+
+def dnc_loop():
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF,65536)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF,65536)  
+    sock.bind((HOST, PORT))
+    sock.listen(50)
+    log("Servidor DNC iniciado")
+    while True:
+        conn, addr = sock.accept()
+        conn.setsockopt(socket.IPPROTO_TCP,socket.TCP_NODELAY,1)
+        conn.setsockopt(socket.SOL_SOCKET,socket.SO_KEEPALIVE,1)
+        try:
+            conn.ioctl(socket.SIO_KEEPALIVE_VALS,(1,10000,3000))
+        except:
+            pass
+        threading.Thread(target=atender_conexao,args=(conn, addr),daemon=True).start()
+# ================= SERVIDOR MONITOR =================
+
+def monitor_server():
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind((HOST, PORT_MONITOR))
+    sock.listen(10)
+    while True:
+        conn, addr = sock.accept()
+        threading.Thread(
+            target=monitor_cliente,
+            args=(conn,),
+            daemon=True
+        ).start()
+
+def monitor_cliente(conn):
+    try:
+        while True:
+            with lock:
+                dados = json.dumps(maquinas).encode()
+            conn.sendall(dados + b"\n")
+            time.sleep(0.5)
+    except:
+        pass
+    finally:
+        conn.close()
+# ================= START =================
+threading.Thread(target=dnc_loop, daemon=True).start()
+threading.Thread(target=monitor_server, daemon=True).start()
+threading.Thread(target=monitor_timeout, daemon=True).start()
+
+while True:
+    time.sleep(1)
