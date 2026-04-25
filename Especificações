@@ -1,0 +1,32 @@
+Recomendo que use o backend como serviço Windows em um servidor e rode o frontend nos computadores de monitoramento, para roda-los como serviço:
+1 - Abra o CMD como administrador
+2 - cd pasta (Pasta onde os arquivos estão salvos, caso seja um computador que acessa o servidor, os arquivos não podem estar na rede)
+3 - pyinstaller --onefile (transforma em .exe) --noconsole (Não abre a janelinha preta) nomedoarquivo.py
+4 - cd dist
+5 - pm2 start nomedoarquivo.exe --name "Nomedoserviço"
+6 - pm2 startup
+7 - pm2 save
+
+Tem também dois arquivos para o operador poder trocar a ordem dos arquivos dentro da pasta, uma vez que o Script puxa apenas o 1° arquivo, e ai para rodar como serviço o Weback:
+1 - Abra o CMD como administrador
+2 - cd pasta (Pasta onde os arquivos estão salvos, caso seja um computador que acessa o servidor, os arquivos não podem estar na rede)
+3 - pip install fastapi uvicorn
+4 - reinicie o cmd
+5 - pm2 start python --name "nomedoserviço" -- -m uvicorn nomedoarquivo:app --host 0.0.0.0(Aceitar conexão de qualquer ip) --port 8888(Porta que o Web ficará rodando)
+6 - pm2 startup
+7 - pm2 save
+
+Existe a possibilidade de ter que instalar mais bibliotecas alem do uvicorn mas ai serão coisas basicas do python uma pesquisadinha rapida resolve mas caso não resolva alguns dos comandos que usei foi:
+npm install -g pm2-windows-service
+pm2-service-install
+npm install pm-windows-startup -g
+pm2-startup install
+pip install watchdog
+python -m pip install --upgrade pip
+winget install Python.Python.3
+
+Para não ocorrer nenhum erro na hora da transmissão os programas devem começar com:
+%
+O0223(REBIMBOCA DA PARAFUSETA) #o numero do programa deve estar livre na maquina e o nome é apenas para identificação
+(..programa..)
+%
