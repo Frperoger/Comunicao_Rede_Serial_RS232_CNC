@@ -10,7 +10,7 @@ from datetime import datetime
 HOST = "0.0.0.0"
 PORT = 8899
 
-BASE_DIR = r"" #Adicionar diretorio onde ficará salvo os arquivos
+BASE_DIR = r"...." #Adicionar diretorio onde ficará salvo os arquivos
 
 PASTA_ENVIAR = os.path.join(BASE_DIR, "ENVIAR")
 PASTA_RECEBER = os.path.join(BASE_DIR, "RECEBER")
@@ -26,6 +26,7 @@ MAQUINA_POR_IP = {
     "192.168.0.11": "CNC04",
     "192.168.0.12": "CNC05",
     "192.168.0.13": "CNC06",
+	"IP DO SEU COMPUTADOR: "PC", #USE PARA TESTES COM O SOFTWARE HERCULES
 }
 HANDSHAKE= {b"\x11"} #(0x11) PC->CNC
 
@@ -52,58 +53,6 @@ def pegar_arquivo(pasta):
     if not arquivos:
         return None
     return os.path.join(pasta, arquivos[0])
-
-def enviar_normal(conn, caminho, maquina):
-    log("Envio iniciado", maquina)
-
-    with open(caminho, "rb") as f:
-        dados=f.read()
-    time.sleep(0.2)
-    log("Enviando arquivo",maquina)
-    for i in range(0, len(dados), 256):
-        conn.send(dados[i:i+256])
-        time.sleep(0.02)
-    log("Transferencia finalizada", maquina)
-    log_geral_evento(maquina,conn.getpeername()[0],"Arquivo enviado com sucesso")
-
-def enviar_dnc(conn, caminho, maquina):
-    log("Envio DNC iniciado", maquina)
-
-    pausado = False
-    with open(caminho, "rb") as f:
-        for linha in f:
-            # Aguarda XON para enviar uma linha de cada vez
-            while pausado:
-                pronto, _, _ = select.select([conn], [], [], 0.5)
-                if not pronto:
-                    continue
-                ctrl = conn.recv(1)
-                if not ctrl:
-                    raise ConnectionError("Conexão encerrada pela CNC durante pausa")
-                if ctrl == XON:
-                    pausado = False
-
-            try:
-                conn.sendall(linha)
-            except (ConnectionResetError,BrokenPipeError,OSError):
-                log("Conexão perdida durante DNC", maquina)
-                return
-
-            # controle XON / XOFF
-            pronto, _, _ = select.select([conn], [], [], 0.01)
-            if pronto:
-                ctrl = conn.recv(1)
-                if not ctrl:
-                    raise ConnectionError("Conexão encerrada pelo CNC durante envio DNC")
-                if ctrl == XOFF:
-                    log("Pausa", maquina)
-                    pausado = True
-                elif ctrl == XON and pausado:
-                    pausado = False
-                    log("Retomando", maquina)
-
-    log("Programa finalizado", maquina)
-    log_geral_evento(maquina,conn.getpeername()[0],"Usinagem finalizada")
 
 def enviar_auto(conn, caminho, maquina):
     log("Envio iniciado", maquina)
@@ -397,6 +346,8 @@ def criar_cards():
 def atualizar_gui():
     with lock:
         for nome, dados in maquinas.items():
+			if nome not in cards:
+				continue
             canvas, lbl_ip, lbl_status = cards[nome]
             canvas.delete("all")
 
