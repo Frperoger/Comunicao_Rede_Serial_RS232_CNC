@@ -30,3 +30,9 @@ Para não ocorrer nenhum erro na hora da transmissão os programas devem começa
 O0223(REBIMBOCA DA PARAFUSETA) #o numero do programa deve estar livre na maquina e o nome é apenas para identificação
 (..programa..)
 %
+
+Caso as máquinas não forem fanuc ou forem e enviarem outro sinal de handshake / xon / xoff, você consegue monitorar quais sinais ela envia pelo aplicativo Hercules
+
+Para rodar os programas diretamente DNC a máquina deve estar em modo RMT(remoto) e para salvar os programas na mesma deve estar em modo MEM(memoria).
+
+contato = rogerpeloso17@gmail.com
