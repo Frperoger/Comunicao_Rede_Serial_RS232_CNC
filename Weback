@@ -1,0 +1,112 @@
+import fastapi
+from fastapi import FastAPI, HTTPException, Header, Depends
+from fastapi.responses import FileResponse
+import os
+from datetime import datetime
+import secrets
+
+app = FastAPI()
+
+LOG = r"...."#pasta onde ficarão salvos os LOGS
+
+USUARIOS = {
+    "Gustavo": {"senha": "senha123", "Maquina": "maquina aqui", "pasta": r"pasta onde estarão os arquivos"},
+}
+
+TOKENS = {}
+TENTATIVAS = {}
+
+def log(msg):
+    with open(LOG, "a", encoding="utf-8") as f:
+        f.write(f"{datetime.now()} - {msg}\n")
+def verificar_token(x_token: str = Header(None,alias="x-token")):
+    if x_token not in TOKENS:
+        raise HTTPException(status_code=403, detail="Acesso negado")
+    return TOKENS[x_token]
+
+@app.post("/login")
+def login(dados: dict):
+    usuario = dados.get("usuario","").lower()
+    senha = dados.get("senha","")
+
+    if usuario in TENTATIVAS and TENTATIVAS[usuario] > 5:
+        raise HTTPException(status_code=403, detail="Muitas tentativas de login")
+
+    for nome in USUARIOS:
+        if nome.lower() == usuario and USUARIOS[nome]["senha"] == senha:
+            token = secrets.token_hex(32)
+            TOKENS[token] = nome
+            
+            if usuario in TENTATIVAS:
+                del TENTATIVAS[usuario]
+                
+            log(f"{nome}fez login")
+            nome_maquina = USUARIOS[nome]["Maquina"]
+            return {"token": token, "maquina":nome_maquina}
+
+    TENTATIVAS[usuario] = TENTATIVAS.get(usuario,0)+1
+    raise HTTPException(status_code=401, detail="Login inválido")
+# ---------------- REMOVE PREFIXO ---------------
+def remover_prefixo(nome):
+    partes = nome.split("_",1)
+    if len(partes)==2 and partes[0].isdigit():
+        return partes[1]
+    return nome
+
+# ---------------- ARQUIVOS ----------------
+def listar(pasta):
+    arquivos = sorted(os.listdir(pasta))
+    return [a for a in arquivos if os.path.isfile(os.path.join(pasta, a))]
+
+@app.get("/arquivos")
+def arquivos(usuario: str = Depends(verificar_token)):
+    pasta = USUARIOS[usuario]["pasta"]
+    lista_completa = []
+    arquivos_nomes = sorted(os.listdir(pasta))
+
+    for nome in arquivos_nomes:
+        caminho_full = os.path.join(pasta, nome)
+        if os.path.isfile(caminho_full):
+            mtime = os.path.getmtime(caminho_full)
+            data_formatada = datetime.fromtimestamp(mtime).strftime('%d/%m/%Y %H:%M')
+            tamanho = os.path.getsize(caminho_full)
+            lista_completa.append({
+                "id_origem" : len(lista_completa) + 1,
+                "nome": nome,
+                "data_modificacao": data_formatada,
+                "caracteres_internos": f"{tamanho}"
+            })
+    return lista_completa
+
+@app.get("/logo.png")
+def get_logo():
+    return FileResponse("logo.png")
+
+@app.post("/reordenar")
+def reordenar(nova_ordem: list[str], usuario: str = Depends(verificar_token)):
+
+    pasta = USUARIOS[usuario]["pasta"]
+    try:
+        temp = []
+        # renomeia tudo para temporário
+        for i,nome in enumerate(nova_ordem):
+            origem = os.path.join(pasta,nome)
+            if not os.path.exists(origem):
+                continue
+            nome_limpo = remover_prefixo(nome)
+            tmp = os.path.join(pasta,f"__tmp_{i}")
+            os.rename(origem,tmp)
+            temp.append((tmp,nome_limpo))
+        # aplica ordem final
+        for i,(tmp,nome_limpo) in enumerate(temp):
+            novo = os.path.join(pasta,f"{i:03d}_{nome_limpo}")
+            os.rename(tmp,novo)
+        log(f"{usuario} alterou ordem")
+        return {"status":"ok"}
+    except Exception as e:
+        log(f"ERRO {usuario}: {str(e)}")
+        return {"status":"erro","msg":str(e)}
+# ---------------- FRONT ----------------
+@app.get("/")
+def pagina():
+    return FileResponse("Webfront.html")
