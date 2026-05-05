@@ -68,13 +68,18 @@ def enviar_auto(conn, caminho, maquina):
         log("Conexão perdida durante envio", maquina)
         return
     for linha in linhas[1:]:
-        try:
-            pronto, _, _ = select.select([conn], [], [], 0.01)
-        except:
-            pronto = []
-        if pronto:
+        while True:
+            try:
+                pronto, _, _ = select.select([conn], [], [], 0.01)
+            except:
+                pronto = []
+            if not pronto:
+                break
             try:
                 dados = conn.recv(32)
+                if not dados:
+                    log("conexão perdida duante envio",maquina)
+                    return "DNC" if modo_dnc else "NORMAL"
             except:
                 dados = b""
             for ctrl in dados:
@@ -94,6 +99,9 @@ def enviar_auto(conn, caminho, maquina):
                     dados = conn.recv(32)
                 except:
                     dados = b""
+                    if not dados:
+                        log("Conexão perdida durante a pausa", maquina)
+                        return "DNC" if modo_dnc else "NORMAL" 
                 for ctrl in dados:
                     if ctrl == 0x11:  # XON
                         pausado = False
