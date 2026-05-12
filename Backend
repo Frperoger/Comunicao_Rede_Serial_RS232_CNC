@@ -125,28 +125,19 @@ def enviar_auto(conn, caminho, maquina):
         linhas = list(f)
     if not linhas:
         return "NORMAL"
-    modo_dnc = False
-    pausado = False
     try:
         conn.sendall(linhas[0])
+        time.sleep(0.01)
     except (ConnectionResetError, BrokenPipeError, OSError):
         log("Conexão perdida durante envio", maquina)
         return
-    for linha in linhas[1:]:
-        while True:
-            try:
-                pronto, _, _ = select.select([conn], [], [], 0.01)
-            except:
-                pronto = []
-            if not pronto:
-                break
-            try:
-                dados = conn.recv(32)
-                if not dados:
-                    log("Conexão perdida durante envio",maquina)
-                    return "DNC" if modo_dnc else "NORMAL"
-            except:
-                dados = b""
+    # DETECTA INICIAL DE DNC
+    modo_dnc = False
+    pausado = False
+    try:
+        pronto, _, _ = select.select([conn], [], [], 0.5)
+        if pronto:
+            dados = conn.recv(64)
             for ctrl in dados:
                 if ctrl == 0x13:  # XOFF
                     modo_dnc = True
@@ -154,39 +145,90 @@ def enviar_auto(conn, caminho, maquina):
                     maquina_atividade(maquina, "Usinando")
                 elif ctrl == 0x11:  # XON
                     pausado = False
-        while pausado:
-            try:
-                pronto, _, _ = select.select([conn], [], [], 0.5)
-            except:
-                pronto = []
-            if pronto:
-                try:
-                    dados = conn.recv(32)
-                except:
-                    dados = b""
-
-                    if not dados:
-                        log("Conexão perdida durante a pausa", maquina)
-                        return "DNC" if modo_dnc else "NORMAL"                   
-                for ctrl in dados:
-                    if ctrl == 0x11:  # XON
-                        pausado = False
+    except:
+        pass
+    # MODO NORMAL 
+    if not modo_dnc:
         try:
-            conn.sendall(linha)
+            dados = b"".join(linhas[1:])
+            tamanho_bloco = 10
+            indice = 0
+            total = len(dados)
+            while indice < total:
+
+                try:
+                    while True:
+                        pronto, _, _ = select.select([conn], [], [], 0.01)
+                        if not pronto:
+                            break
+                        ctrl_bytes = conn.recv(10)
+                        if not ctrl_bytes:
+                            log("Conexão perdida durante envio", maquina)
+                            return "NORMAL"
+                        for ctrl in ctrl_bytes:
+                            if ctrl == 0x13:  # XOFF
+                                modo_dnc = True
+                                pausado = False
+                                maquina_atividade(maquina, "Usinando")
+                                break
+                        if modo_dnc:
+                            break
+                    if modo_dnc:
+                        break
+                except:
+                    pass
+                # ENVIO RÁPIDO
+                conn.sendall(dados[indice:indice + tamanho_bloco])
+                indice += tamanho_bloco
+            # TROCOU PARA DNC
+            if modo_dnc:
+                restante = dados[indice:]
+                linhas_restantes = restante.splitlines(keepends=True)
+                linhas = [b""] + linhas_restantes
+                indice = 1
+            else:
+                log("Transferência finalizada", maquina)
+                log_geral_evento(maquina, conn.getpeername()[0], "Programa enviado com sucesso")
+                return "NORMAL"
         except (ConnectionResetError, BrokenPipeError, OSError):
             log("Conexão perdida durante envio", maquina)
-            return "DNC" if modo_dnc else "NORMAL"
-        if not modo_dnc:
-            time.sleep(0.02)
+            return "NORMAL"
+    # MODO DNC COM XON/XOFF
+    indice = 1
+    while indice < len(linhas):
+        dados = b""
+        try:
+            while True:
+                pronto, _, _ = select.select([conn], [], [], 0.2)
+                if not pronto:
+                    break
+                parte = conn.recv(64)
+                if not parte:
+                    log("Conexão perdida durante envio", maquina)
+                    return "DNC"
+                dados += parte
+                if len(parte) < 64:
+                    break
+        except:
+            pass
+        for ctrl in dados:
+            if ctrl == 0x13:  # XOFF
+                pausado = True
+                maquina_atividade(maquina, "Usinando")
+            elif ctrl == 0x11:  # XON
+                pausado = False
+        if pausado:
+            continue
+        try:
+            conn.sendall(linhas[indice])
+        except (ConnectionResetError, BrokenPipeError, OSError):
+            log("Conexão perdida durante envio", maquina)
+            return "DNC"
+        indice += 1
+    log("Programa finalizado", maquina)
+    log_geral_evento(maquina, conn.getpeername()[0], "Usinagem finalizada")
+    return "DNC"
 
-    if modo_dnc:
-        log("Programa finalizado", maquina)
-        log_geral_evento(maquina, conn.getpeername()[0], "Usinagem finalizada")
-        return "DNC"
-    else:
-        log("Transferência finalizada", maquina)
-        log_geral_evento(maquina, conn.getpeername()[0], "Programa enviado com sucesso")
-        return "NORMAL"
 
 def atender_conexao(conn, addr):
     conn.settimeout(0.5)
