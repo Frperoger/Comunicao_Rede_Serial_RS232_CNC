@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerenciador de Arquivos</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+
+        .item-clicado {
+            background: rgba(241,196,15,0.2) !important;
+            border-left: 5px solid #f1c40f;
+            transition: background-color 0.3s ease;  
+        }
+
+        :root {
+            --bg-dark: #1a335a;
+            --bg-light: #ffffff;
+            --text-main: #2c3e50;
+            --accent: #34495e;
+            --btn-blue: #2c4475;
+        }
+
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            margin: 0;
+            background-color: #f4f7f6;
+            color: var(--text-main);
+        }
+
+        /* LOGIN */
+        #telaLogin {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: #ffffff;
+            position: relative;
+            color: var(--bg-dark);
+        }
+.login-header-logo {
+            align-items: center;
+        }
+
+        .login-header-logo img {
+            height: 70px;
+            width: auto;
+        }
+
+        .login-container {
+            text-align: center;
+            width: 100%;
+            max-width: 460px;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .login-icon-circle {
+            width: 80px;
+            height: 80px;
+            background-color: var(--bg-dark);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 25px auto;
+        }
+
+        .login-icon-circle i {
+            color: white;
+            font-size: 40px;
+        }
+
+        .login-title {
+            font-size: 36px;
+            font-weight: 700;
+            margin: 0 0 5px 0;
+            color: var(--bg-dark);
+            letter-spacing: -0.5px;
+        }
+
+        .login-subtitle {
+            font-size: 20px;
+            color: #576574;
+            margin: 0 0 45px 0;
+        }
+
+        .login-field-group {
+            text-align: left;
+            margin-bottom: 25px;
+            width: 100%;
+        }
+
+        .login-field-group label {
+            display: block;
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            margin-left: 20px;
+            color: var(--bg-dark);
+        }
+
+        .login-input-wrapper {
+            display: flex;
+            align-items: center;
+            border: 2.5px solid var(--bg-dark);
+            border-radius: 35px;
+            padding: 12px 25px;
+            background: white;
+            height: 35px;
+        }
+
+        .login-input-wrapper .field-icon {
+            font-size: 22px;
+            color: var(--bg-dark);
+            margin-right: 15px;
+        }
+
+        .login-input-wrapper input {
+            border: none;
+            outline: none;
+            width: 100%;
+            font-size: 18px;
+            color: var(--text-main);
+            background: transparent;
+        }
+
+        .login-input-wrapper input::placeholder {
+            color: #a4b0be;
+        }
+
+        .toggle-password {
+            font-size: 18px;
+            color: #747d8c;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+
+        .login-submit-btn {
+            display: inline-flex;
+            align-items: center;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            margin-top: 20px;
+            outline: none;
+            gap: 15px;
+            padding: 10px;
+        }
+
+        .btn-icon-box {
+            width: 44px;
+            height: 44px;
+            background-color: var(--bg-dark);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.2s;
+        }
+
+        .btn-icon-box i {
+            color: white;
+            font-size: 25px;
+        }
+
+        .login-submit-btn span {
+            font-size: 35px;
+            font-weight: bold;
+            color: var(--bg-dark);
+        }
+
+        .login-submit-btn:hover .btn-icon-box {
+            background-color: var(--btn-blue);
+        }
+
+        /* TELA ARQUIVOS */
+        #telaArquivos {
+            display: none;
+            max-width: 1200px;
+            margin: 0 auto;
+            background: var(--bg-dark);
+            min-height: 100vh;
+            color: white;
+        }
+
+        /* HEADER */
+        .header {
+            background: white;
+            padding: 20px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: var(--bg-dark);
+        }
+
+        .header h2 { margin: 0; font-size: 24px; }
+        .header p { margin: 5px 0 0 0; color: #7f8c8d; font-size: 14px; }
+
+        .btn-enviar {
+            background: var(--bg-dark);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        /* TABELA / LISTA */
+        .tabela-header, .arquivo-item {
+            display: grid;
+            grid-template-columns: 85px 50px 1fr 90px 300px 140px;
+            align-items: center;
+            padding: 20px 40px;
+            gap: 15px;
+            min-height: 100px;
+        }
+        .tabela-header{
+            font-size: 20px;
+            min-height: auto;
+            background: rgba(255, 255, 255, 0.03);
+            font-weight: bold;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        #lista {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .arquivo-item {
+            display: grid;
+            grid-template-columns: 85px 50px 1fr 90px 300px 140px;
+            align-items: center;
+            padding: 15px 40px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            transition: background 0.2s;
+            gap: 15px;
+            font-size: 20px;
+        }
+
+        .arquivo-item:hover { background: rgba(255,255,255,0.05); }
+
+        .file-icon { font-size: 30px; margin-right: 15px; }
+        .file-info b { word-break: break-all; font-size: 22px; display: block; padding-right: 10px; }
+        .file-info span { font-size: 11px; opacity: 0.7; }
+
+        .badge {
+            background: white;
+            color: var(--bg-dark);
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 14px;
+            display: inline-block;
+        }
+        .id-coluna{
+            font-size: 24px;
+            font-weight: bold;
+            opacity: 0.9;
+            text-align: center;
+        }
+
+        /* CONTROLES ORDEM */
+        .order-controls {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .order-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: white;
+            cursor: pointer;
+            font-size: 28px;
+            padding: 10px;
+            border-radius: 8px;
+            line-height: 1;
+            transition: background 0.2s,transform 0.1s;
+            opacity: 0.8;
+        }
+
+        .order-btn:hover {
+            background:rgba(255, 255, 255, 0.3);
+            transform: scale(0.9);
+        }
+
+        /* FOOTER */
+        .footer-actions {
+            position: fixed;
+            bottom: 0;
+            width: 900px;
+            background: white;
+            padding: 15px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-sizing: border-box;
+            color: var(--bg-dark);
+        }
+
+        .btn-atualizar, .btn-salvar {
+            background: #e0e6ed;
+            border: none;
+            padding: 15px 35px;
+            border-radius: 30px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-right: 10px;
+            min-width: 150px;
+        }
+
+    </style>
+</head>
+<body>
+
+<div id="telaLogin">
+    <div class="login-header-logo">
+        <img src="logo.png" alt="Logo GCR MAQ">
+    </div>
+
+    <div class="login-container">
+        <div class="login-icon-circle">
+            <i class="fas fa-microchip"></i>
+        </div>
+
+        <h1 class="login-title">Acesso ao Sistema</h1>
+        <p class="login-subtitle">Gestão de Arquivos de Produção</p>
+
+        <div class="login-field-group">
+            <label for="user">Usuário</label>
+            <div class="login-input-wrapper">
+                <i class="far fa-user field-icon"></i>
+                <input id="user" placeholder="seu.usuário">
+            </div>
+        </div>
+
+        <div class="login-field-group">
+            <label for="pass">Senha</label>
+            <div class="login-input-wrapper">
+                <i class="fas fa-lock field-icon"></i>
+                <input id="pass" type="password" placeholder="••••••••">
+                <i class="far fa-eye toggle-password" onclick="togglePasswordVisibility()"></i>
+            </div>
+        </div>
+
+        <button class="login-submit-btn" onclick="login()">
+            <div class="btn-icon-box">
+                <i class="fas fa-arrow-right"></i>
+            </div>
+            <span>Entrar</span>
+        </button>
+    </div>
+</div>
+
+<div id="telaArquivos">
+    <div class="header">
+        <div style="display: flex; align-items: center; gap: 50px;">
+            <img src="logo.png" alt="Logo" style="height: 65px; width: auto; object-fit:contain; margin-right: 20px;">
+            <div>
+                <h2 id="titulo-pagina" style="font-size: 30px;">Arquivos</h2>
+                <p id="info-conexao" style="color: #7f8c8d; font-size: 14px;"></p>
+            </div>
+        </div>      
+        <div>
+            <button class="btn-enviar" style="background: #c0392b; padding: 12px 25px;" onclick="logout()">Sair / Logout</button>
+        </div>
+    </div>
+
+    <div class="tabela-header">
+        <span style="text-align: center;">Ordem</span>
+        <span style="text-align: center;">ID</span>
+        <span style="text-align: center;">Nome</span>
+        <span style="text-align: center;">Formato</span>
+        <span style="text-align: center;">Data de modificação</span>
+        <span style="text-align: center;">Tamanho</span>
+    </div>
+
+    <ul id="lista"></ul>
+
+    <div style="display: flex; justify-content: center; padding: 20px; gap: 10px;">
+        <button class="btn-atualizar" onclick="mudarPagina(-1)">Anterior</button>
+        <span id="pagi-info" style="align-self: center;">Página 1</span>
+        <button class="btn-atualizar" onclick="mudarPagina(1)">Próxima</button>
+    </div>
+
+    <div style="height: 80px;"></div> 
+    
+    <div class="footer-actions">
+        <span id="status-footer">0 itens com posição alterada</span>
+        <div>
+            <button class="btn-atualizar" onclick="carregar()">Atualizar</button>
+            <button class="btn-salvar" onclick="salvar()">Salvar Ordem</button>
+        </div>
+    </div>
+</div>
+
+<script>
+let TOKEN = "";
+let arquivos = [];
+
+let ordemOriginal = [];
+let paginaAtual = 1;
+const itensPorPagina = 15;
+let loginUsuario = "";
+let ultimoMovido = null;
+let Maquina = ""
+
+function togglePasswordVisibility() {
+    const passInput = document.getElementById("pass");
+    const icon = document.querySelector(".toggle-password");
+    if (passInput.type === "password") {
+        passInput.type = "text";
+        icon.classList.remove("fa-eye");
+        icon.classList.add("fa-eye-slash");
+    } else {
+        passInput.type = "password";
+        icon.classList.remove("fa-eye-slash");
+        icon.classList.add("fa-eye");
+    }
+}
+
+// Função para controlar a troca de páginas
+function mudarPagina(delta) {
+    const totalPaginas = Math.ceil(arquivos.length / itensPorPagina);
+    const novaPagina = paginaAtual + delta;
+    if(novaPagina > 0 && novaPagina <= totalPaginas) {
+        paginaAtual = novaPagina;
+        render();
+    }
+}
+
+async function login() {
+    const usuarioInput = document.getElementById("user").value;
+    const senha = document.getElementById("pass").value;
+    const usuarioFormatado = usuarioInput.charAt(0).toUpperCase() + usuarioInput.slice(1).toLowerCase();
+    const res = await fetch('/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ usuario: usuarioInput, senha: senha })
+        });
+        if (!res.ok) {
+            alert("Usuário ou senha inválidos");
+            return;
+        }
+        if (res.ok){
+            const data = await res.json();
+            TOKEN = data.token;
+            const Maquina = data.maquina || "Servidor Remoto";
+            document.getElementById("titulo-pagina").innerText = `Arquivos do usuário: ${usuarioFormatado}`;
+            document.getElementById("info-conexao").innerText = `Máquina: ${Maquina}`;        
+            document.getElementById("telaLogin").style.display = "none";
+            document.getElementById("telaArquivos").style.display = "block";        
+            carregar();
+          }
+}
+document.getElementById("user").addEventListener("keypress", function(e) {
+    if (e.key === "Enter") login();
+});
+document.getElementById("pass").addEventListener("keypress", function(e) {
+    if (e.key === "Enter") login();
+});
+
+// LOGOUT
+function logout(){
+
+  TOKEN="";
+  document.getElementById("user").value="";
+  document.getElementById("pass").value="";
+  document.getElementById("telaArquivos").style.display="none";
+  document.getElementById("telaLogin").style.display="flex";
+}
+
+// CARREGAR ARQUIVOS
+async function carregar() {
+    try {
+        const res = await fetch('/arquivos', {
+            headers: { 'x-token': TOKEN }
+        });
+        if (!res.ok) throw new Error(`Status:${res.status}`);      
+        const data = await res.json();
+        arquivos = Array.isArray(data) ? data : [];
+
+        ordemOriginal = JSON.parse(JSON.stringify(arquivos)); 
+        paginaAtual = 1; 
+        render();
+    } catch (e) {
+        console.error("Erro no carregameto",e);
+        alert("Erro ao carregar arquivos do servidor.");
+    }
+}
+
+
+// RENDER LISTA
+function render() {
+    const lista = document.getElementById("lista");
+    if (!lista) return;
+    lista.innerHTML = "";
+    const totalPaginas = Math.ceil(arquivos.length / itensPorPagina) || 1;
+    const inicio = (paginaAtual - 1) * itensPorPagina;
+    const itensExibidos = arquivos.slice(inicio, inicio + itensPorPagina);
+    itensExibidos.forEach((item, i) => {
+        const indexReal = inicio + i;
+
+        const nomeStr = item.nome;
+        const idOrigem = item.id_origem;
+        const dataMod = item.data_modificacao || "---";
+        const conteudoTamanho = item.caracteres_internos || "---"; 
+        const extensao = nomeStr.includes('.') ? nomeStr.split('.').pop().toUpperCase() : '';
+
+        const classeDestaque = (item === ultimoMovido) ? 'item-clicado' : '';
+        lista.innerHTML += `
+            <li class="arquivo-item ${classeDestaque}">
+                <div class="order-controls">
+                    <button class="order-btn" onclick="subir(${indexReal})" title="Subir">
+                        <i class="fas fa-chevron-up"></i>    
+                    </button>
+                    <button class="order-btn" onclick="descer(${indexReal})" title="Descer">
+                        <i class="fas fa-chevron-down"></i>    
+                    </button>
+                </div>                  
+                <div class ="id-coluna";>${idOrigem}</div>
+                <div style="text-align: center;" class="file-info;"><b>${nomeStr}</b></div>
+                <div style="text-align: center;"><span class="badge";>.${extensao}</span></div>
+                <div style="font-size: 20px; opacity: 0.9; text-align: center;">${dataMod}</div>
+                <div style="font-size: 20px; text-align: center;">${conteudoTamanho} caracteres</div>
+            </li>`;
+    });
+    document.getElementById("pagi-info").innerText = `Página ${paginaAtual} de ${totalPaginas}`;
+    const alterados = calcularItensAlterados();
+    document.getElementById("status-footer").innerText = `${alterados} itens com posição alterada`;
+}
+
+// CALCULO
+function calcularItensAlterados() {
+    let contador = 0;
+    arquivos.forEach((item, index) => {
+        if (ordemOriginal[index] && item.nome !== ordemOriginal[index].nome) {
+            contador++;
+        }
+    });
+    return contador;
+}
+
+// SUBIR
+function subir(i){
+  if(i>0){
+    ultimoMovido = arquivos[i];
+    [arquivos[i], arquivos[i-1]] = [arquivos[i-1], arquivos[i]];
+    render();
+  }
+}
+
+
+// DESCER
+function descer(i){
+  if(i<arquivos.length-1){
+    ultimoMovido = arquivos[i];
+    [arquivos[i], arquivos[i+1]] = [arquivos[i+1], arquivos[i]];
+    render();
+  }
+}
+
+// SALVAR ORDEM
+async function salvar(){
+  try{
+      const dadosParaEnviar = arquivos.map(a =>typeof a === 'object' ? a.nome : a);
+      const res = await fetch('/reordenar', {
+          method:'POST',
+          headers:{
+              'Content-Type':'application/json',
+              'x-token':TOKEN
+          },
+          body:JSON.stringify(dadosParaEnviar)
+      });
+      if(res.ok){
+          alert("Ordem salva com sucesso")
+          ordemOriginal = JSON.parse(JSON.stringify(arquivos));
+          ultimoMovido = null
+          await carregar();
+      }else{
+          const erroTxt = await res.text();
+          console.error("Erro do servidor:",erroTxt);
+          alert("Erro ao salvar:" +" "+ res.status);
+      }
+  } catch (e) {
+  console.error("Erro de rede:", e);
+  alert("Erro de comunicação com o servidor.");
+ }
+}
+</script>
+
+</body>
+</html>
